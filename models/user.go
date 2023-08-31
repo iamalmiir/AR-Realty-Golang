@@ -39,19 +39,3 @@ func (s *UserStorage) NewUser(user *User) error {
 
 	return nil
 }
-
-// Get all users
-func (s *UserStorage) GetUsers() ([]User, error) {
-	query := `
-        SELECT id, first_name, last_name, email, password, created_at, updated_at
-        FROM users
-    `
-
-	var users []User
-	err := s.Conn.Select(&users, query)
-	if err != nil {
-		return nil, err
-	}
-
-	return users, nil
-}

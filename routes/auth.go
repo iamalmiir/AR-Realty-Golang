@@ -3,6 +3,7 @@ package routes
 import (
 	"golabs/db"
 	"golabs/models"
+	"golabs/utils"
 
 	"github.com/gofiber/fiber/v2"
 	"golang.org/x/crypto/bcrypt"
@@ -18,24 +19,21 @@ func Register(c *fiber.Ctx) error {
 	var user models.User
 	err := c.BodyParser(&user)
 
-	db := db.DB
 	if err != nil {
-		return c.Status(400).SendString(err.Error())
+		return c.Status(400).JSON(utils.ServerResponse(400, "Something is wrong with your request. Please check your request and try again."))
 	}
+
+	db := db.DB
 	userStorage := models.UserStorage{Conn: db}
 	hash, err := hashPassword(user.Password)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"status":  "error",
-			"message": "Couldn't create user",
-			"data":    err.Error(),
-		})
+		return c.Status(500).JSON(utils.ServerResponse(500, "Something went wrong. Please try again later or contact us."))
 	}
 	user.Password = hash
 	err = userStorage.NewUser(&user)
 	if err != nil {
-		return c.Status(400).SendString(err.Error())
+		return c.Status(500).JSON(utils.ServerResponse(500, "Something went wrong. Please check your data or try again later."))
 	}
 
-	return c.Status(200).SendString("User created!")
+	return c.Status(200).JSON(utils.ServerResponse(200, "User registered successfully", user))
 }
