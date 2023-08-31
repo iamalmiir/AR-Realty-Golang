@@ -17,7 +17,6 @@ func main() {
 	app.Use(logger.New())
 
 	app.Post("/register", routes.Register)
-	app.Get("/users", routes.GetAllUsers)
 
 	log.Fatal(app.Listen(":3000"))
 }
