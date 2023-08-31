@@ -1,56 +1,57 @@
 package models
 
 import (
-	"database/sql"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 )
 
+type UserStorage struct {
+	Conn *sqlx.DB
+}
+
 type User struct {
-	ID        uuid.UUID `json:"id"`
-	Name      string    `json:"name"`
-	Email     string    `json:"email"`
-	Password  string    `json:"password"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID        uuid.UUID `db:"id" json:"id"`
+	FirstName string    `db:"first_name" json:"first_name"`
+	LastName  string    `db:"last_name" json:"last_name"`
+	Email     string    `db:"email" json:"email"`
+	Password  string    `db:"password" json:"password"`
+	CreatedAt time.Time `db:"created_at" json:"created_at"`
+	UpdatedAt time.Time `db:"updated_at" json:"updated_at"`
 }
 
-func CreateUser(user *User) error {
-	sqlStatement := `INSERT INTO users (id, name, email, password, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`
+// Create new user
+func (s *UserStorage) NewUser(user *User) error {
+	query := `
+		INSERT INTO users (id, first_name, last_name, email, password, created_at, updated_at) 
+		VALUES (:id, :first_name, :last_name, :email, :password, :created_at, :updated_at)
+	`
 
-	_, err := db.Exec(sqlStatement, user.ID, user.Name, user.Email, user.Password, user.CreatedAt, user.UpdatedAt)
+	user.ID = uuid.New()
+	user.CreatedAt = time.Now()
+	user.UpdatedAt = time.Now()
 
-	return err
-}
-
-func GetUser(id uuid.UUID) (User, error) {
-	var user User
-	sqlStatement := `SELECT id, name, email, created_at, updated_at FROM users WHERE id = ? LIMIT 1;`
-
-	row := db.QueryRow(sqlStatement, id)
-
-	err := row.Scan(&user.ID, &user.Name, &user.Email, &user.CreatedAt, &user.UpdatedAt)
+	_, err := s.Conn.NamedExec(query, user)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return User{}, nil // Return empty user if the user doesn't exist
-		}
-		return User{}, err
+		return err
 	}
 
-	return user, nil
+	return nil
 }
 
-func CheckEmail(email string, user *User) bool {
-	sqlStatement := `SELECT id, name, email, password FROM users WHERE email = ? LIMIT 1`
+// Get all users
+func (s *UserStorage) GetUsers() ([]User, error) {
+	query := `
+        SELECT id, first_name, last_name, email, password, created_at, updated_at
+        FROM users
+    `
 
-	err := db.QueryRow(sqlStatement, email).Scan(&user.ID, &user.Name, &user.Email, &user.Password)
+	var users []User
+	err := s.Conn.Select(&users, query)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return false // No matching user found
-		}
-		return false // Other error occurred
+		return nil, err
 	}
 
-	return true
+	return users, nil
 }
