@@ -1,7 +1,9 @@
 package services
 
 import (
-	"golabs/config"
+	"context"
+	"encoding/json"
+	"fmt"
 	"golabs/db"
 	"golabs/models"
 	"golabs/utils"
@@ -9,7 +11,6 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -25,20 +26,20 @@ func isEmail(email string) bool {
 	return err == nil
 }
 
+type LoginInput struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type UserData struct {
+	ID        uuid.UUID `json:"id"`
+	FirstName string    `json:"first_name"`
+	LastName  string    `json:"last_name"`
+	Email     string    `json:"email"`
+	Password  string    `json:"password"`
+}
+
 func Login(c *fiber.Ctx) error {
-	type LoginInput struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}
-
-	type UserData struct {
-		ID        uuid.UUID `json:"id"`
-		FirstName string    `json:"first_name"`
-		LastName  string    `json:"last_name"`
-		Email     string    `json:"email"`
-		Password  string    `json:"password"`
-	}
-
 	input := new(LoginInput)
 	var userData UserData
 
@@ -50,7 +51,7 @@ func Login(c *fiber.Ctx) error {
 	pass := input.Password
 	userModel := &models.User{}
 
-	db := db.DB
+	db, rdb := db.DB, db.Rdb
 	userStorage := models.UserStorage{Conn: db}
 	var err error
 	if isEmail(identity) {
@@ -73,26 +74,45 @@ func Login(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusUnauthorized).JSON(utils.ServerResponse(401, "Invalid password", err))
 	}
 
-	token := jwt.New(jwt.SigningMethodHS512)
-	claims := token.Claims.(jwt.MapClaims)
-	claims["id"] = userData.ID
-	claims["email"] = userData.Email
-	claims["exp"] = time.Now().Add(time.Hour * 24).Unix()
+	sessionID := uuid.NewString()
+	jsonData, err := json.Marshal(userData)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(utils.ServerResponse(500, "Internal server error!", err))
+	}
+	err = rdb.Set(context.Background(), sessionID, jsonData, 24*time.Hour).Err()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(utils.ServerResponse(500, "Internal server error!!", err))
+	}
 
-	t, err := token.SignedString([]byte(config.GetEnv("SECRET")))
+	c.Response().Header.Set("Authorization", fmt.Sprintf("Bearer %s", sessionID))
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"user":    map[string]interface{}{"first_name": userData.FirstName, "last_name": userData.LastName, "email": userData.Email},
+		"status":  "success",
+		"message": "Login success",
+	})
+}
+
+func GetSessionData(c *fiber.Ctx) error {
+	sessionID := c.Get("Authorization")
+
+	if sessionID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(utils.ServerResponse(400, "Session not found", nil))
+	}
+
+	rdb := db.Rdb
+	println(sessionID[7:])
+	sessionData, err := rdb.Get(context.Background(), sessionID[7:]).Result()
+
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(utils.ServerResponse(500, "Internal server error--", err))
+	}
+
+	var userData UserData
+	err = json.Unmarshal([]byte(sessionData), &userData)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(utils.ServerResponse(500, "Internal server error", err))
 	}
-	cookie := new(fiber.Cookie)
-	cookie.Name = "token"
-	cookie.Value = t
-	cookie.Expires = time.Now().Add(time.Hour * 24)
-	cookie.HTTPOnly = true
 
-	c.Cookie(cookie)
-
-	return c.Status(fiber.StatusOK).JSON(utils.ServerResponse(200, "Success", UserData{
-		FirstName: userData.FirstName,
-		LastName:  userData.LastName,
-	}, t))
+	return c.Status(fiber.StatusOK).JSON(userData)
 }

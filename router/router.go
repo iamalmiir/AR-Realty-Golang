@@ -2,7 +2,6 @@ package router
 
 import (
 	"golabs/config"
-	"golabs/middleware"
 	"golabs/services"
 
 	"github.com/gofiber/fiber/v2"
@@ -21,5 +20,6 @@ func SetupRoutes(app *fiber.App) {
 	// User routes
 	user := app.Group("/user", logger.New())
 	user.Post("/register", services.Register)
-	user.Post("/", middleware.Protected(), services.GetUserByEmail)
+	user.Post("/", services.GetUserByEmail)
+	user.Get("/me", services.GetSessionData)
 }
