@@ -39,3 +39,20 @@ func (s *UserStorage) NewUser(user *User) error {
 
 	return nil
 }
+
+// Get user by email
+func (s *UserStorage) GetUserByEmail(email string) (*User, error) {
+	query := `
+        SELECT *
+        FROM users
+        WHERE email = ?
+    `
+
+	var user User
+	err := s.Conn.Get(&user, query, email)
+	if err != nil {
+		return nil, err
+	}
+
+	return &user, nil
+}
